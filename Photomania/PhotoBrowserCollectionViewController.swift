@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import Alamofire
 
 class PhotoBrowserCollectionViewController: UICollectionViewController, UICollectionViewDelegateFlowLayout {
     
@@ -23,6 +24,22 @@ class PhotoBrowserCollectionViewController: UICollectionViewController, UICollec
     super.viewDidLoad()
     
     setupView()
+    
+    Alamofire.request(.GET, "https://api.500px.com/v1/photos", parameters: ["consumer_key": "5tU9ikrM096SaczrM3AX5lAXTJSkpkK3LQHTuWTN"]).responseJSON { (response) in
+        guard let JSON = response.result.value else { return }
+        print("JSON: \(JSON)")
+        
+        guard let photoJsons = JSON.valueForKey("photos") as? [NSDictionary] else { return }
+        
+        photoJsons.forEach{
+            guard let nsfw = $0["nsfw"] as? Bool, let id = $0["id"] as? Int, let url = $0["image_url"] as? String
+                where nsfw == false  else { return }
+            
+            self.photos.insert(PhotoInfo.init(id: id, url: url))
+        }
+        
+        self.collectionView?.reloadData()
+    }
   }
   
   override func didReceiveMemoryWarning() {
