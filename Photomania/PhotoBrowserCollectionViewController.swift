@@ -10,13 +10,14 @@ import UIKit
 import Alamofire
 
 class PhotoBrowserCollectionViewController: UICollectionViewController, UICollectionViewDelegateFlowLayout {
-    
-  var photos = Set<PhotoInfo>()
+    var photos = Set<PhotoInfo>()
   
-  let refreshControl = UIRefreshControl()
+    let refreshControl = UIRefreshControl()
+    var populatingPhotos = false
+    var currentPage = 1
   
-  let PhotoBrowserCellIdentifier = "PhotoBrowserCell"
-  let PhotoBrowserFooterViewIdentifier = "PhotoBrowserFooterView"
+    let PhotoBrowserCellIdentifier = "PhotoBrowserCell"
+    let PhotoBrowserFooterViewIdentifier = "PhotoBrowserFooterView"
   
   // MARK: Life-cycle
   
@@ -25,22 +26,26 @@ class PhotoBrowserCollectionViewController: UICollectionViewController, UICollec
     
     setupView()
     
-    Alamofire.request(.GET, "https://api.500px.com/v1/photos", parameters: ["consumer_key": "5tU9ikrM096SaczrM3AX5lAXTJSkpkK3LQHTuWTN"]).responseJSON { (response) in
-        guard let JSON = response.result.value else { return }
-        print("JSON: \(JSON)")
-        
-        guard let photoJsons = JSON.valueForKey("photos") as? [NSDictionary] else { return }
-        
-        photoJsons.forEach{
-            guard let nsfw = $0["nsfw"] as? Bool, let id = $0["id"] as? Int, let url = $0["image_url"] as? String
-                where nsfw == false  else { return }
-            
-            self.photos.insert(PhotoInfo.init(id: id, url: url))
-        }
-        
-        self.collectionView?.reloadData()
+    populatePhotos()
+    
+//    Alamofire.request(.GET, "https://api.500px.com/v1/photos", parameters: ["consumer_key": "5tU9ikrM096SaczrM3AX5lAXTJSkpkK3LQHTuWTN"]).responseJSON { (response) in
+//        guard let JSON = response.result.value else { return }
+//        print("JSON: \(JSON)")
+//        
+//        guard let photoJsons = JSON.valueForKey("photos") as? [NSDictionary] else { return }
+//        
+//        photoJsons.forEach{
+//            guard let nsfw = $0["nsfw"] as? Bool, let id = $0["id"] as? Int, let url = $0["image_url"] as? String
+//                where nsfw == false  else { return }
+//            
+//            self.photos.insert(PhotoInfo.init(id: id, url: url))
+//        }
+//        
+//        self.collectionView?.reloadData()
+//    }
+    
+    
     }
-  }
   
   override func didReceiveMemoryWarning() {
     super.didReceiveMemoryWarning()
@@ -109,6 +114,62 @@ class PhotoBrowserCollectionViewController: UICollectionViewController, UICollec
       (segue.destinationViewController as! PhotoViewerViewController).hidesBottomBarWhenPushed = true
     }
   }
+    
+    override func scrollViewDidScroll(scrollView: UIScrollView) {
+//        一旦滚动超过了 80% 的页面，那么scrollViewDidScroll()方法将会加载更多的图片
+        if scrollView.contentOffset.y + self.view.frame.size.height > scrollView.contentSize.height * 0.8 {
+            self.populatePhotos()
+        }
+    }
+    
+    func populatePhotos() {
+        // 2
+        if populatingPhotos {
+            return
+        }
+        
+        populatingPhotos = true
+        
+        // 3
+        Alamofire.request(Five100px.Router.PopularPhotos(self.currentPage)).responseJSON() {
+            response in
+            func failed() { self.populatingPhotos = false }
+            guard let JSON = response.result.value else { failed(); return }
+            if response.result.error != nil { failed(); return }
+            
+            // 4
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0)) {
+                // 5
+                guard let photoJsons = JSON.valueForKey("photos") as? [NSDictionary] else { return }
+                
+                // 6
+                let lastItem = self.photos.count
+                
+                // 7
+                photoJsons.forEach {
+                    guard let nsfw = $0["nsfw"] as? Bool,
+                        let id = $0["id"] as? Int,
+                        let url = $0["image_url"] as? String
+                        where nsfw == false else { return }
+                    // 8
+                    self.photos.insert(PhotoInfo(id: id, url: url))
+                }
+                
+                // 9
+                let indexPaths = (lastItem..<self.photos.count).map { NSIndexPath(forItem: $0, inSection: 0) }
+                
+                // 10
+                dispatch_async(dispatch_get_main_queue()) {
+                    self.collectionView!.insertItemsAtIndexPaths(indexPaths)
+                }
+                
+                self.currentPage += 1
+                
+            }
+        }
+        self.populatingPhotos = false
+    }
+    
   
   func handleRefresh() {
     

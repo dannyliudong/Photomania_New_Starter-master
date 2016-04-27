@@ -20,6 +20,7 @@ struct Five100px {
         case Comments(Int, Int)
         
         var URLRequest: NSMutableURLRequest {
+            
             let result: (path: String, parameters: [String: AnyObject]) = {
                 switch self {
                 case .PopularPhotos(let page):
